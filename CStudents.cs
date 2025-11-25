@@ -24,6 +24,7 @@ namespace CoursesUMAD
 
         //Methods
 
+        // Method to verify if the student can enroll in more courses
         public bool verifyEnrollmentLimit(int maxCourses)
         {
             return enrolled_Courses.Count < maxCourses;
