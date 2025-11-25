@@ -4,17 +4,18 @@ using System.Text;
 
 namespace CoursesUMAD
 {
-    public class CCurso
+    public class CCourses
     {
         //PROPERTIES
-        public int course_ID { get; set; } // Unique identifier for the course
+        public int course_ID { get; private set; } // Unique identifier for the course
         public string course_Name { get; set; } // Name of the course
         public string course_Intructor { get; set; } // Name of the course instructor
         public int course_Quota { get; set; } // Maximum number of students allowed in the course
         public List<int> registered_Students { get; private set; } // List of student IDs registered in the course
 
+
         //CONSTRUCTOR
-        public CCurso(int id, string name, string instructor, int quota)
+        public CCourses(int id, string name, string instructor, int quota)
         {
             course_ID = id;
             course_Name = name;
@@ -56,6 +57,7 @@ namespace CoursesUMAD
             return registered_Students.Count;
         }
 
+        // Override ToString method to display course information
         public override string ToString()
         {
             StringBuilder sb = new StringBuilder();
