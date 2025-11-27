@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Evaluaciones;
 using CoursesUMAD.Exceptions;
 
 namespace CoursesUMAD
@@ -14,7 +15,7 @@ namespace CoursesUMAD
         private List<CCourses> courses;
         private List<CStudents> students;
         private Dictionary<int, CCourses> course_Catalog;
-        private Dictionary<int, List<double>> student_Grades;
+        private Dictionary<int, List<Calificacion>> student_Grades;
 
         // ═══════════════════════════════════════════════════════
         //                       CONSTRUCTOR 
@@ -24,7 +25,7 @@ namespace CoursesUMAD
             courses = new List<CCourses>();
             students = new List<CStudents>();
             course_Catalog = new Dictionary<int, CCourses>();
-            student_Grades = new Dictionary<int, List<double>>();
+            student_Grades = new Dictionary<int, List<Calificacion>>(); 
         }
 
         // ═══════════════════════════════════════════════════════
@@ -58,22 +59,19 @@ namespace CoursesUMAD
         /// </summary>
         public void RegisterStudent(CStudents student)
         {
-            //Null check
-            if (student == null) throw new ArgumentNullException(nameof(student), "The student cannot be null");
+            if (student == null)
+                throw new ArgumentNullException(nameof(student), "The student cannot be null");
 
-            //Student duplicate check
             if (students.Any(s => s.student_ID == student.student_ID))
             {
                 throw new ExcStudentDuplicate($"A student with ID {student.student_ID} already exists.");
             }
 
-            //Add student to collection
             students.Add(student);
 
-            //Initializes the student's grades list
-            student_Grades[student.student_ID] = new List<double>();
+            // Inicializar con lista de objetos Calificacion
+            student_Grades[student.student_ID] = new List<Calificacion>();  // ← Cambio aquí
 
-            //Confirmation message
             Console.WriteLine($"Student '{student.student_Name}' with ID {student.student_ID} registered successfully.");
         }
 
@@ -126,25 +124,45 @@ namespace CoursesUMAD
         /// Register a grade for a student.
         /// </summary>
 
-        public void RegisterGrade(int studentId, double grade)
+        /// <summary>
+        /// Registra una calificación para un alumno en un curso específico
+        /// </summary>
+        public void RegisterGrade(int studentId, int courseId, double grade, string concept = "General")
         {
-            //Check grade range
-            if(grade < 0 || grade > 10)
+            // Validar rango
+            if (!Evaluador.IsValidGrade(grade))
             {
-                throw new ExcInvalidGrade($"The grade {grade} is invalid. It must be between 0 and 10.");
+                throw new ExcInvalidGrade(grade, Evaluador.MinimumGrade, Evaluador.MaximumGrade);
             }
 
-            //Check if student exists
-            if (students.All(s => s.student_ID != studentId))
+            // Verificar que el alumno existe
+            if (!student_Grades.ContainsKey(studentId))
             {
                 throw new ExcStudentNotFound(studentId);
             }
 
-            //Register grade
-            student_Grades[studentId].Add(grade);
+            // Verificar que el curso existe
+            if (!course_Catalog.ContainsKey(courseId))
+            {
+                throw new ExcCourseNotFound(courseId);
+            }
 
-            //Confirmation message
-            Console.WriteLine($"Grade {grade} registered for student ID {studentId}.");
+            // Crear objeto Calificacion completo usando el ensamblado
+            Calificacion nuevaCalificacion = new Calificacion(studentId, courseId, grade, concept);
+
+            // Agregar a la colección
+            student_Grades[studentId].Add(nuevaCalificacion);
+
+            Console.WriteLine($"Grade {grade} ({concept}) registered for student {studentId} in course {courseId}.");
+        }
+
+        /// <summary>
+        /// Sobrecarga simplificada (sin especificar curso ni concepto)
+        /// Para compatibilidad con código anterior
+        /// </summary>
+        public void RegisterGrade(int studentId, double grade)
+        {
+            RegisterGrade(studentId, 0, grade, "General");  // courseId = 0 indica "sin curso específico"
         }
 
 
@@ -182,9 +200,25 @@ namespace CoursesUMAD
         ///<summary>
         ///Get student grades
         /// </summary>
+        /// <summary>
+        /// Obtiene solo los valores numéricos de las calificaciones de un alumno
+        /// </summary>
         public List<double> GetStudentGrades(int studentId)
         {
-            //Check if student exists in Dictionary
+            if (!student_Grades.ContainsKey(studentId))
+            {
+                throw new ExcStudentNotFound(studentId);
+            }
+
+            // Extraer solo los valores numéricos de los objetos Calificacion
+            return student_Grades[studentId].Select(c => c.Grade).ToList();
+        }
+
+        /// <summary>
+        /// Obtiene los objetos Calificacion completos de un alumno
+        /// </summary>
+        public List<Calificacion> GetStudentGradeObjects(int studentId)
+        {
             if (!student_Grades.ContainsKey(studentId))
             {
                 throw new ExcStudentNotFound(studentId);
@@ -250,24 +284,17 @@ namespace CoursesUMAD
         /// </summary>
         public void ShowStudentReport(int studentId)
         {
-            // TODO: Obtener el alumno
             var student = GetStudentById(studentId);
-
-            // TODO: Obtener sus calificaciones
             var grades = GetStudentGrades(studentId);
 
-            // TODO: Calcular promedio
-            double average = grades.Count > 0 ? grades.Average() : 0;
+            // Usar el GeneradorReportes del ensamblado externo
+            string report = GeneradorReportes.GenerateStudentReport(
+                student.student_Name,
+                student.student_ID,
+                grades
+            );
 
-            // TODO: Mostrar reporte
-            Console.WriteLine($"\n=== STUDENT REPORT ===");
-            Console.WriteLine($"ID: {student.student_ID}");
-            Console.WriteLine($"Name: {student.student_Name}");
-            Console.WriteLine($"Email: {student.student_Email}");
-            Console.WriteLine($"Enrolled Courses: {student.GetEnrolledCourseCount()}");
-            Console.WriteLine($"Total Grades: {grades.Count}");
-            Console.WriteLine($"Average: {average:F2}");
-            Console.WriteLine($"Status: {(average >= 6.0 ? "APPROVED ✓" : "FAILED ✗")}");
+            Console.WriteLine(report);
         }
 
         /// <summary>
@@ -275,10 +302,97 @@ namespace CoursesUMAD
         /// </summary>
         public void ShowStatistics()
         {
-            Console.WriteLine("\n=== SYSTEM STATISTICS ===");
-            Console.WriteLine($"Total Courses: {CountElements(courses)}");
-            Console.WriteLine($"Total Students: {CountElements(students)}");
-            Console.WriteLine($"Total Grades Registered: {student_Grades.Values.Sum(g => g.Count)}");
+            Console.WriteLine("\n╔════════════════════════════════════════════════╗");
+            Console.WriteLine("║            SYSTEM STATISTICS                   ║");
+            Console.WriteLine("╚════════════════════════════════════════════════╝");
+            Console.WriteLine($"Total Courses:         {CountElements(courses)}");
+            Console.WriteLine($"Total Students:        {CountElements(students)}");
+
+            // Contar todas las calificaciones registradas
+            int totalGrades = student_Grades.Values.Sum(list => list.Count);
+            Console.WriteLine($"Total Grades:          {totalGrades}");
+
+            // Estadísticas adicionales usando el ensamblado
+            if (totalGrades > 0)
+            {
+                var allGrades = student_Grades.Values
+                    .SelectMany(list => list)
+                    .Select(c => c.Grade)
+                    .ToList();
+
+                double systemAverage = Evaluador.CalculateAverage(allGrades);
+                double highest = Evaluador.GetHighestGrade(allGrades);
+                double lowest = Evaluador.GetLowestGrade(allGrades);
+                int approved = Evaluador.CountApprovedGrades(allGrades);
+
+                Console.WriteLine($"System Average:        {systemAverage:F2}");
+                Console.WriteLine($"Highest Grade:         {highest:F2}");
+                Console.WriteLine($"Lowest Grade:          {lowest:F2}");
+                Console.WriteLine($"Approved Grades:       {approved}");
+                Console.WriteLine($"Failed Grades:         {totalGrades - approved}");
+            }
+        }
+
+        /// <summary>
+        /// Muestra todas las calificaciones de un alumno con detalles completos
+        /// </summary>
+        public void ShowDetailedGrades(int studentId)
+        {
+            var student = GetStudentById(studentId);
+            var gradeObjects = GetStudentGradeObjects(studentId);
+
+            Console.WriteLine($"\n╔════════════════════════════════════════════════╗");
+            Console.WriteLine($"║     DETAILED GRADES FOR {student.student_Name,-22} ║");
+            Console.WriteLine($"╚════════════════════════════════════════════════╝");
+
+            if (gradeObjects.Count == 0)
+            {
+                Console.WriteLine("No grades registered.");
+                return;
+            }
+
+            Console.WriteLine();
+            foreach (var calificacion in gradeObjects)
+            {
+                Console.WriteLine(calificacion);  // Usa el ToString() de Calificacion
+            }
+        }
+
+        /// <summary>
+        /// Obtiene las calificaciones de un alumno en un curso específico
+        /// </summary>
+        public List<Calificacion> GetGradesByCourse(int studentId, int courseId)
+        {
+            var allGrades = GetStudentGradeObjects(studentId);
+            return allGrades.Where(c => c.CourseId == courseId).ToList();
+        }
+
+        /// <summary>
+        /// Muestra el promedio de un alumno en un curso específico
+        /// </summary>
+        public void ShowCourseAverage(int studentId, int courseId)
+        {
+            var student = GetStudentById(studentId);
+            var course = GetCourseById(courseId);
+            var courseGrades = GetGradesByCourse(studentId, courseId);
+
+            if (courseGrades.Count == 0)
+            {
+                Console.WriteLine($"\n{student.student_Name} has no grades in {course.course_Name}");
+                return;
+            }
+
+            double average = courseGrades.Select(c => c.Grade).Average();
+            string status = Evaluador.IsApproved(average) ? "APPROVED ✓" : "FAILED ✗";
+
+            Console.WriteLine($"\n╔════════════════════════════════════════════════╗");
+            Console.WriteLine($"║          COURSE PERFORMANCE REPORT             ║");
+            Console.WriteLine($"╚════════════════════════════════════════════════╝");
+            Console.WriteLine($"Student:  {student.student_Name}");
+            Console.WriteLine($"Course:   {course.course_Name}");
+            Console.WriteLine($"Grades:   {courseGrades.Count}");
+            Console.WriteLine($"Average:  {average:F2}");
+            Console.WriteLine($"Status:   {status}");
         }
     }
 }
